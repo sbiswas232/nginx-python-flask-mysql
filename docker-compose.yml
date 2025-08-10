@@ -1,20 +1,19 @@
 version: "3.8"
 
 services:
-  mysql:
-    user: "${UID}:${GID}" 
+  mysql-db: 
     image: mysql:5.7
-    container_name: mysql
+    container_name: "mysql-cont"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: devops
-      MYSQL_USER: admin
-      MYSQL_PASSWORD: admin
+      MYSQL_ROOT_PASSWORD: "admin@123"
+      MYSQL_DATABASE: "devops"
+    ports:
+      - "3306:3306"
     volumes:
-      - ./mysql-data:/var/lib/mysql
-      - ./message.sql:/docker-entrypoint-initdb.d/message.sql  
+      - mysql-data:/var/lib/mysql 
     networks:
-      - twotier
+      - pythonflask-nw
+    restart: always
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
@@ -23,19 +22,22 @@ services:
       start_period: 60s
 
   flask-app:
-    image: trainwithshubham/two-tier-flask-app:latest
-    container_name: flask-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "python-flask-mysql-app:v07aug25"
+    container_name: "flask-cont"
     ports:
       - "5000:5000"
     environment:
-      MYSQL_HOST: mysql
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root
-      MYSQL_DB: devops
+      MYSQL_HOST: "mysql-cont"
+      MYSQL_USER: "root"
+      MYSQL_PASSWORD: "admin@123"
+      MYSQL_DB: "devops"
     depends_on:
-      - mysql
+      - mysql-db
     networks:
-      - twotier
+      - pythonflask-nw
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
@@ -44,5 +46,25 @@ services:
       retries: 5
       start_period: 30s
 
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: nginx
+    container_name: "nginx-cont"
+    ports:
+      - "80:80"
+    networks:
+      - pythonflask-nw
+    depends_on:
+      - flask-app
+    restart: always
+
+
 networks:
-  twotier:
+  pythonflask-nw:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
